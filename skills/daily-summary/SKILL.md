@@ -1,6 +1,6 @@
 # daily-summary
 
-Produce a daily GitHub activity summary for a GitHub organisation: commits (all branches), PRs opened/updated/merged, issues opened/closed, and issue comments, grouped by repo.
+Produce a daily GitHub activity summary for a GitHub organisation: commits (all branches), PRs opened/updated/merged, issues opened/closed, issue comments, and GitHub Projects activity — grouped by repo and project.
 
 ## Trigger
 
@@ -61,7 +61,80 @@ gh api "/repos/<ORG>/<REPO>/issues/comments?since=<DATE>T00:00:00Z&per_page=30" 
   --jq '.[] | "\(.created_at[11:16]) \(.user.login) on #\(.issue_url | split("/") | last): \(.body | split("\n")[0] | .[0:120])"'
 ```
 
+## Step 6 — GitHub Projects activity
+
+Find projects updated on the target date, fetch their items (with Status field), and filter to items whose `updatedAt` or `content.updatedAt` falls on the target date. Then for each such item, fetch today's issue comments and timeline events (assigned, closed, reopened, labeled).
+
+```bash
+# Find projects updated today
+gh api graphql -f query='
+  query {
+    organization(login: "<ORG>") {
+      projectsV2(first: 20) {
+        nodes { number title updatedAt closed }
+      }
+    }
+  }' \
+  --jq ".data.organization.projectsV2.nodes[] |
+    select(.closed == false and .updatedAt >= \"<DATE>T00:00:00Z\") |
+    \"\(.number) \(.title)\""
+
+# Items updated today within a project
+gh api graphql -f query='
+  query($org: String!, $num: Int!) {
+    organization(login: $org) {
+      projectV2(number: $num) {
+        title
+        items(first: 50) {
+          nodes {
+            updatedAt
+            fieldValues(first: 10) {
+              nodes {
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name
+                  field { ... on ProjectV2SingleSelectField { name } }
+                }
+              }
+            }
+            content {
+              ... on Issue      { number title state updatedAt repository { name } assignees(first: 3) { nodes { login } } }
+              ... on PullRequest { number title state updatedAt repository { name } }
+              ... on DraftIssue  { title updatedAt }
+            }
+          }
+        }
+      }
+    }
+  }' -f org="<ORG>" -F num=<PROJECT_NUMBER> \
+  --jq '.data.organization.projectV2 | .title as $proj |
+    .items.nodes[] |
+    select((.updatedAt >= "<DATE>T00:00:00Z") or (.content.updatedAt >= "<DATE>T00:00:00Z")) |
+    {
+      project: $proj,
+      itemUpdated: .updatedAt[0:16],
+      status: (.fieldValues.nodes[] | select(.field.name == "Status") | .name),
+      repo: .content.repository.name,
+      number: .content.number,
+      title: .content.title,
+      state: .content.state,
+      assignees: [.content.assignees.nodes[]?.login]
+    }'
+
+# Comments on a project item's issue today
+gh api "/repos/<ORG>/<REPO>/issues/<NUMBER>/comments" \
+  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\") |
+    \"\(.created_at[11:16]) \(.user.login): \(.body | split(\"\n\")[0] | .[0:120])\""
+
+# Timeline events (closed, assigned, labeled, reopened)
+gh api "/repos/<ORG>/<REPO>/issues/<NUMBER>/events" \
+  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\") |
+    select(.event == \"closed\" or .event == \"reopened\" or .event == \"labeled\" or .event == \"assigned\") |
+    \"\(.created_at[11:16]) [\(.event)] by \(.actor.login)\""
+```
+
 ## Output format
+
+### Repo section
 
 Group by repo. Within each repo, use these sections (omit empty ones):
 
@@ -77,10 +150,25 @@ Group by repo. Within each repo, use these sections (omit empty ones):
 **Issues**
 - #N [open|closed] author: title
   - HH:MM commenter: first line of comment
-  - HH:MM commenter: first line of comment
 ```
 
-End with a one-line **Summary** — e.g. *"3 repos active · 12 commits · 2 PRs merged · 4 issues updated"*.
+### Projects section
+
+After the repo sections, add a `## Projects` section. Group by project. For each project, list items active today with their status, assignees, and a chronological activity log:
+
+```
+## Projects
+
+### `<Project Title>` (#N)
+
+**#<number> — <title>** · <Status> · assignees
+- HH:MM event or comment
+- HH:MM event or comment
+```
+
+Omit projects with no activity on the target date.
+
+End with a one-line **Summary** — e.g. *"3 repos active · 12 commits · 2 PRs merged · 4 issues updated · 3 projects touched"*.
 
 ## Notes
 
@@ -89,3 +177,5 @@ End with a one-line **Summary** — e.g. *"3 repos active · 12 commits · 2 PRs
 - For repos where the commits API returns `409 Git Repository is empty`, skip silently.
 - Truncate long comment bodies at ~120 characters to keep the summary readable.
 - If the org has many repos (50+), process in parallel using the Agent tool with multiple Bash calls.
+- Skip closed projects when fetching project activity.
+- An item may appear in both the repo section (as an issue) and the projects section — this is intentional; the repo section shows what changed in the code, the projects section shows board/workflow movement.
