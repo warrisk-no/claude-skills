@@ -30,7 +30,7 @@ gh api /repos/<ORG>/<REPO>/branches --paginate --jq '.[].name'
 
 # Commits on each branch (deduplicate by SHA across branches)
 gh api --paginate "/repos/<ORG>/<REPO>/commits?sha=<BRANCH>&since=<DATE>T00:00:00Z&until=<NEXT_DATE>T00:00:00Z&per_page=100" \
-  --jq '.[] | {sha: .sha[0:7], author: .commit.author.name, repo: "<REPO>", branch: "<BRANCH>", msg: (.commit.message | split("\n")[0])}'
+  --jq '.[] | {sha: .sha, author: .commit.author.name, repo: "<REPO>", branch: "<BRANCH>", msg: (.commit.message | split("\n")[0])}'
 ```
 
 Group deduplicated commits by author. For each author, summarise what they worked on in plain English (infer topic from commit messages and branch names — do not list raw messages).
@@ -61,8 +61,8 @@ Fetch ALL open projects, not just those active today. This gives the complete st
 gh api graphql -f query='
   query {
     organization(login: "<ORG>") {
-      projectsV2(first: 20) {
-        nodes { number title closed updatedAt items(first: 0) { totalCount } }
+      projectsV2(first: 50) {
+        nodes { number title closed updatedAt items(first: 1) { totalCount } }
       }
     }
   }' \
@@ -74,7 +74,7 @@ gh api graphql -f query='
   query($org: String!, $num: Int!) {
     organization(login: $org) {
       projectV2(number: $num) {
-        items(first: 50) {
+        items(first: 100) {
           nodes {
             updatedAt
             fieldValues(first: 10) {
@@ -95,11 +95,12 @@ gh api graphql -f query='
     }
   }' -f org="<ORG>" -F num=<PROJECT_NUMBER> \
   --jq '.data.organization.projectV2.items.nodes[] |
+    select(.content != null) |
     {
       status: (.fieldValues.nodes[] | select(.field.name == "Status") | .name),
       title: .content.title,
       number: .content.number,
-      updatedAt: .content.updatedAt
+      updatedAt: .updatedAt
     }'
 ```
 
