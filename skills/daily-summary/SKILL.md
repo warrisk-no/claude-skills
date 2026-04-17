@@ -1,6 +1,6 @@
 # daily-summary
 
-Produce a daily GitHub activity summary for a GitHub organisation: commits (all branches), PRs opened/updated/merged, issues opened/closed, issue comments, and GitHub Projects activity — grouped by repo and project.
+Produce a daily GitHub activity summary for a GitHub organisation: commits (all branches), PRs opened/updated/merged, issues opened/closed, issue comments, and GitHub Projects activity — organised by project first, with commits and PRs nested under their linked issues, and unaffiliated activity grouped separately at the end.
 
 ## Trigger
 
@@ -47,6 +47,16 @@ gh pr list --repo <ORG>/<REPO> --state all --limit 200 \
   --json number,title,author,state,createdAt,updatedAt,mergedAt \
   --jq '.[] | select(.updatedAt >= "<DATE>T00:00:00Z" and .updatedAt < "<NEXT_DATE>T00:00:00Z") | "#\(.number) [\(.state)] \(.author.login): \(.title)"'
 ```
+
+For each PR returned, fetch its branch name and closing-issue references. This is used to link commits (which carry the branch name) back to PRs, and PRs back to issues:
+
+```bash
+gh pr view --repo <ORG>/<REPO> <PR_NUMBER> \
+  --json number,headRefName,closingIssuesReferences \
+  --jq '{pr: .number, branch: .headRefName, closes: [.closingIssuesReferences[].number]}'
+```
+
+Build a linkage map from this data: branch name → PR number → list of closing issue numbers.
 
 ## Step 4 — Issues
 
@@ -140,27 +150,18 @@ gh api "/repos/<ORG>/<REPO>/issues/<NUMBER>/events" \
 
 ## Output format
 
-### Repo section
+Projects are the primary grouping. Issues sit under their project, with commits, PRs, and comments nested under each issue. Activity not linked to any project goes in a separate section at the end.
 
-Group by repo. Within each repo, use these sections (omit empty ones):
+### Linking activity to issues
 
-```
-### `<repo>`
+Before rendering, build a linkage map using the PR data from Step 3:
+- **Commits → PR**: match a commit's branch name to the PR whose `headRefName` matches.
+- **PR → issues**: use `closingIssuesReferences`; also recognise `#N` patterns in the PR title.
+- **Issue → project**: from the project items fetched in Step 6.
 
-**Commits** (`<branch>`)
-- HH:MM `<sha>` [Author] commit message
+Anything not reachable through this chain is unaffiliated.
 
-**Pull requests**
-- #N [open|merged|closed] author: title
-
-**Issues**
-- #N [open|closed] author: title
-  - HH:MM commenter: first line of comment
-```
-
-### Projects section
-
-After the repo sections, add a `## Projects` section. Group by project. For each project, list items active today with their status, assignees, and a chronological activity log:
+### Projects section (rendered first)
 
 ```
 ## Projects
@@ -168,11 +169,44 @@ After the repo sections, add a `## Projects` section. Group by project. For each
 ### `<Project Title>` (#N)
 
 **#<number> — <title>** · <Status> · assignees
-- HH:MM event or comment
-- HH:MM event or comment
+- HH:MM [event] by actor
+- **PR #N** [state] author: title
+  - HH:MM `sha` commit message
+  - HH:MM `sha` commit message
+- HH:MM commenter: comment body
 ```
 
-Omit projects with no activity on the target date.
+Rules:
+- Only include project items with activity today (events, linked PR/commit updates, or comments).
+- List events (assigned, closed, labeled, reopened) first in chronological order.
+- Under each event list, show any PRs that close this issue, with their commits indented beneath.
+- After PRs, show any comments on the issue.
+- If a project item is itself a PR (not an issue), list its commits directly under it.
+- Omit projects with no activity on the target date.
+
+### Unaffiliated activity (rendered after projects)
+
+Commits, PRs, and issues that have no link to any project item:
+
+```
+## Unaffiliated activity
+
+### `<repo>`
+
+**Commits** (`<branch>`)
+- HH:MM `sha` [Author] commit message
+
+**Pull requests**
+- #N [state] author: title
+
+**Issues**
+- #N [state] author: title
+  - HH:MM commenter: comment
+```
+
+Omit this section entirely if all activity is covered by projects.
+
+---
 
 End with a one-line **Summary** — e.g. *"3 repos active · 12 commits · 2 PRs merged · 4 issues updated · 3 projects touched"*.
 
@@ -184,4 +218,4 @@ End with a one-line **Summary** — e.g. *"3 repos active · 12 commits · 2 PRs
 - Truncate long comment bodies at ~120 characters to keep the summary readable.
 - If the org has many repos (50+), process in parallel using the Agent tool with multiple Bash calls.
 - Skip closed projects when fetching project activity.
-- An item may appear in both the repo section (as an issue) and the projects section — this is intentional; the repo section shows what changed in the code, the projects section shows board/workflow movement.
+- Items tracked in a project appear only in the Projects section — never duplicated in Unaffiliated activity.
