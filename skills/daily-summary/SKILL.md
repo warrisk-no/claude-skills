@@ -11,25 +11,28 @@ User says `/daily-summary` or asks for a daily summary, today's activity, or wha
 1. **Org** — GitHub organisation slug (e.g. `warrisk-no`). Default: `warrisk-no`.
 2. **Date** — ISO date (e.g. `2026-04-16`). Default: today (`currentDate` from context).
 
+Derive `<NEXT_DATE>` (= DATE + 1 day in `YYYY-MM-DD` format) before running any steps — it is used as the exclusive upper bound throughout.
+
 ## Step 1 — Find active repos
 
-Fetch all repos in the org sorted by `pushed_at`, then filter to those pushed on the target date:
+Fetch all repos pushed on the target date. Use a `[DATE, NEXT_DATE)` window so past-date summaries don't bleed into later days. Repos with only issue/PR activity (no push) are picked up naturally in Steps 3–5 — don't drop them if they appear there.
 
 ```bash
 gh api /orgs/<ORG>/repos --paginate \
-  --jq 'sort_by(.pushed_at) | reverse | .[] | select(.pushed_at >= "<DATE>T00:00:00Z") | .name'
+  --jq 'sort_by(.pushed_at) | reverse | .[] |
+    select(.pushed_at >= "<DATE>T00:00:00Z" and .pushed_at < "<NEXT_DATE>T00:00:00Z") | .name'
 ```
 
 ## Step 2 — Commits (all branches)
 
-For each active repo, iterate branches and collect commits since midnight on the target date. Skip empty results.
+For each active repo, iterate branches and collect commits within the `[DATE, NEXT_DATE)` window. Skip empty results.
 
 ```bash
-# List branches
-gh api /repos/<ORG>/<REPO>/branches --jq '.[].name'
+# List branches (paginate — repos with many branches truncate at one page)
+gh api /repos/<ORG>/<REPO>/branches --paginate --jq '.[].name'
 
 # Commits on a branch
-gh api "/repos/<ORG>/<REPO>/commits?sha=<BRANCH>&since=<DATE>T00:00:00Z&per_page=20" \
+gh api --paginate "/repos/<ORG>/<REPO>/commits?sha=<BRANCH>&since=<DATE>T00:00:00Z&until=<NEXT_DATE>T00:00:00Z&per_page=100" \
   --jq '.[] | "\(.commit.author.date[11:16]) \(.sha[0:7]) [\(.commit.author.name)] \(.commit.message | split("\n")[0])"'
 ```
 
@@ -37,28 +40,28 @@ Deduplicate commits that appear on multiple branches (same SHA).
 
 ## Step 3 — Pull requests
 
-Fetch PRs updated on or after the target date. Include open, merged, and closed states.
+Fetch PRs updated during the target date. Include open, merged, and closed states.
 
 ```bash
-gh pr list --repo <ORG>/<REPO> --state all \
+gh pr list --repo <ORG>/<REPO> --state all --limit 200 \
   --json number,title,author,state,createdAt,updatedAt,mergedAt \
-  --jq '.[] | select(.updatedAt >= "<DATE>T00:00:00Z") | "#\(.number) [\(.state)] \(.author.login): \(.title)"'
+  --jq '.[] | select(.updatedAt >= "<DATE>T00:00:00Z" and .updatedAt < "<NEXT_DATE>T00:00:00Z") | "#\(.number) [\(.state)] \(.author.login): \(.title)"'
 ```
 
 ## Step 4 — Issues
 
-Fetch issues updated on or after the target date. Exclude PRs (they appear in the issues API too).
+Fetch issues updated during the target date. Exclude PRs (they appear in the issues API too).
 
 ```bash
-gh api "/repos/<ORG>/<REPO>/issues?state=all&since=<DATE>T00:00:00Z&per_page=30" \
-  --jq '.[] | select(.pull_request == null) | "#\(.number) [\(.state)] \(.user.login): \(.title)"'
+gh api --paginate "/repos/<ORG>/<REPO>/issues?state=all&since=<DATE>T00:00:00Z&per_page=100" \
+  --jq '.[] | select(.pull_request == null and .updated_at >= "<DATE>T00:00:00Z" and .updated_at < "<NEXT_DATE>T00:00:00Z") | "#\(.number) [\(.state)] \(.user.login): \(.title)"'
 ```
 
 ## Step 5 — Issue comments
 
 ```bash
-gh api "/repos/<ORG>/<REPO>/issues/comments?since=<DATE>T00:00:00Z&per_page=30" \
-  --jq '.[] | "\(.created_at[11:16]) \(.user.login) on #\(.issue_url | split("/") | last): \(.body | split("\n")[0] | .[0:120])"'
+gh api --paginate "/repos/<ORG>/<REPO>/issues/comments?since=<DATE>T00:00:00Z&per_page=100" \
+  --jq '.[] | select(.created_at >= "<DATE>T00:00:00Z" and .created_at < "<NEXT_DATE>T00:00:00Z") | "\(.created_at[11:16]) \(.user.login) on #\(.issue_url | split("/") | last): \(.body | split("\n")[0] | .[0:120])"'
 ```
 
 ## Step 6 — GitHub Projects activity
@@ -76,7 +79,7 @@ gh api graphql -f query='
     }
   }' \
   --jq ".data.organization.projectsV2.nodes[] |
-    select(.closed == false and .updatedAt >= \"<DATE>T00:00:00Z\") |
+    select(.closed == false and .updatedAt >= \"<DATE>T00:00:00Z\" and .updatedAt < \"<NEXT_DATE>T00:00:00Z\") |
     \"\(.number) \(.title)\""
 
 # Items updated today within a project
@@ -108,7 +111,10 @@ gh api graphql -f query='
   }' -f org="<ORG>" -F num=<PROJECT_NUMBER> \
   --jq '.data.organization.projectV2 | .title as $proj |
     .items.nodes[] |
-    select((.updatedAt >= "<DATE>T00:00:00Z") or (.content.updatedAt >= "<DATE>T00:00:00Z")) |
+    select(
+      ((.updatedAt >= "<DATE>T00:00:00Z") and (.updatedAt < "<NEXT_DATE>T00:00:00Z")) or
+      ((.content.updatedAt >= "<DATE>T00:00:00Z") and (.content.updatedAt < "<NEXT_DATE>T00:00:00Z"))
+    ) |
     {
       project: $proj,
       itemUpdated: .updatedAt[0:16],
@@ -122,12 +128,12 @@ gh api graphql -f query='
 
 # Comments on a project item's issue today
 gh api "/repos/<ORG>/<REPO>/issues/<NUMBER>/comments" \
-  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\") |
+  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\" and .created_at < \"<NEXT_DATE>T00:00:00Z\") |
     \"\(.created_at[11:16]) \(.user.login): \(.body | split(\"\n\")[0] | .[0:120])\""
 
 # Timeline events (closed, assigned, labeled, reopened)
 gh api "/repos/<ORG>/<REPO>/issues/<NUMBER>/events" \
-  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\") |
+  --jq ".[] | select(.created_at >= \"<DATE>T00:00:00Z\" and .created_at < \"<NEXT_DATE>T00:00:00Z\") |
     select(.event == \"closed\" or .event == \"reopened\" or .event == \"labeled\" or .event == \"assigned\") |
     \"\(.created_at[11:16]) [\(.event)] by \(.actor.login)\""
 ```
