@@ -1,3 +1,8 @@
+---
+name: gh-project-setup
+description: Set up a GitHub project board from scratch — create labels, milestones, issues, and add all items to a project. Use when the user runs /gh-project-setup or asks to set up a GitHub project, create issues for a workstream, or bootstrap a repo's project board.
+---
+
 # gh-project-setup
 
 Set up a GitHub project board from scratch: create labels, milestones, issues, and add all items to a project.

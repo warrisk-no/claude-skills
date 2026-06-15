@@ -1,3 +1,8 @@
+---
+name: cto-summary
+description: Produce a daily executive/CTO summary for a GitHub organisation — team standup (who worked on what), strategic project status across open projects, and auto-detected blockers and flags. Use when the user runs /cto-summary or asks for an executive summary, CTO view, leadership summary, or standup summary.
+---
+
 # cto-summary
 
 Produce a daily executive summary for a GitHub organisation: who worked on what (team standup), strategic project status across all open projects, and auto-detected blockers and flags. Synthesises GitHub activity into plain-language narrative — no raw SHAs or commit logs.
