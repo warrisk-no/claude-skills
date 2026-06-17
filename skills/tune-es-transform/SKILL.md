@@ -1,3 +1,8 @@
+---
+name: tune-es-transform
+description: Analyse a running or stopped Elasticsearch transform's live stats and recommend optimal docs_per_second and max_page_search_size settings, then optionally apply them. Use when the user asks to tune, optimise, or find good settings for an Elasticsearch transform, or mentions docs_per_second / max_page_search_size for a transform.
+---
+
 # tune-es-transform
 
 Analyse a running or stopped Elasticsearch transform's live stats and recommend optimal `docs_per_second` and `max_page_search_size` settings, then optionally apply them.

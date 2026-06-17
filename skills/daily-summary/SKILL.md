@@ -1,3 +1,8 @@
+---
+name: daily-summary
+description: Produce a daily GitHub activity summary for an organisation — commits across all branches, PRs opened/updated/merged, issues opened/closed, comments, and Projects activity, organised by project. Use when the user runs /daily-summary or asks for a daily summary, today's activity, or what happened today on GitHub.
+---
+
 # daily-summary
 
 Produce a daily GitHub activity summary for a GitHub organisation: commits (all branches), PRs opened/updated/merged, issues opened/closed, issue comments, and GitHub Projects activity — organised by project first, with commits and PRs nested under their linked issues, and unaffiliated activity grouped separately at the end.

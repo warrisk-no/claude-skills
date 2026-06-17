@@ -1,3 +1,8 @@
+---
+name: gh-project-roadmap-setup
+description: Add custom fields and a roadmap view to a GitHub Projects v2 board, including the GraphQL workarounds for what the gh CLI cannot do yet. Use when the user runs /gh-project-roadmap-setup or asks to configure roadmap dates, add custom fields to a project, or set up a GitHub Projects v2 roadmap view.
+---
+
 # gh-project-roadmap-setup
 
 Set up custom fields and roadmap view in a GitHub Projects v2 board. Covers the manual steps and the GraphQL workarounds for what `gh project` CLI cannot do yet.

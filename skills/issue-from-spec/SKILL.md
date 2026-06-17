@@ -1,3 +1,8 @@
+---
+name: issue-from-spec
+description: Convert a plain-language feature spec, bullet list, or workstream description into ready-to-create GitHub issues with consistent structure. Use when the user runs /issue-from-spec or provides a spec/plan and asks to turn it into GitHub issues, draft issues, or create issues.
+---
+
 # issue-from-spec
 
 Convert a plain-language feature spec, bullet list, or workstream description into ready-to-create GitHub issues with consistent structure.
