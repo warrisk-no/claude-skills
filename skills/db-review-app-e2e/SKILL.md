@@ -9,7 +9,7 @@ Test a `warrisk-no/database` PR end-to-end through the member portal: every data
 
 ## Trigger
 
-User says /db-review-app-e2e or asks to test a database PR/change end-to-end in the portal, or to point a portal review app at a database review app.
+User says `/db-review-app-e2e` or asks to test a database PR/change end-to-end in the portal, or to point a portal review app at a database review app.
 
 ## Step 1 — Locate the database review app and wait for its release
 
@@ -21,7 +21,7 @@ heroku releases -a warrisk-db-pr-<n>             # wait until the deploy release
 The first release copies the production DB, obfuscates PII, seeds test users, and runs migrations — it takes several minutes. Optionally spot-check the fix is live, e.g.:
 
 ```bash
-heroku pg:psql -a warrisk-db-pr-<n> -c "select prosecdef from pg_proc where proname = '<function>'"
+heroku pg:psql -a warrisk-db-pr-<n> -c "select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = '<schema>' and p.proname = '<function_name>' and pg_get_function_identity_arguments(p.oid) = '<arg_types>'"
 ```
 
 ## Step 2 — Open a DO NOT MERGE portal PR

@@ -9,7 +9,7 @@ Review a pull request in `warrisk-no/database` (PostgreSQL schema, dbmate migrat
 
 ## Trigger
 
-User says /db-pr-review or asks to review a database-repo PR (e.g. "review database PR 384").
+User says `/db-pr-review` or asks to review a database-repo PR (e.g. "review database PR 384").
 
 ## Step 1 — Fetch the PR
 
@@ -31,7 +31,7 @@ Review `sql/` changes first and suppress feedback on `migrations/` that is alrea
 ```bash
 grep -n "<table>" sql/rls.sql sql/rls-policies.sql   # does it have RLS?
 grep -n "db-schema" postgrest-portal*.conf            # is the schema API-exposed?
-psql $DATABASE_URL -c "select prosecdef from pg_proc where proname = '<function>'"
+psql $DATABASE_URL -c "select p.prosecdef from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = '<schema>' and p.proname = '<function_name>' and pg_get_function_identity_arguments(p.oid) = '<arg_types>'"
 ```
 
 ## Step 3 — Migration + split-check mechanics
