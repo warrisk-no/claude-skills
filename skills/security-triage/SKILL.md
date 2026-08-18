@@ -1,3 +1,8 @@
+---
+name: security-triage
+description: Sweep GitHub security alerts across an organisation — Dependabot, secret scanning, and code scanning — triage them by severity, check the state of Dependabot fix PRs, file issues for unhandled criticals, flag stale secret-scanning alerts for rotation, and produce a prioritized digest. Use when the user runs /security-triage or asks for a security-alert sweep, security digest, or vulnerability triage across the org.
+---
+
 # security-triage
 
 Sweep GitHub security alerts across an organisation — Dependabot, secret scanning, and code scanning — triage them by severity, check the state of Dependabot fix PRs, file issues for unhandled criticals, flag stale secret-scanning alerts for rotation, and produce a prioritized digest. Designed to run weekly on a schedule and on demand.
@@ -29,10 +34,10 @@ gh api "/orgs/<ORG>/dependabot/alerts?state=open&per_page=100" --paginate > /tmp
 jq -s 'add' /tmp/dep_alerts_pages.json > /tmp/dep_open.json   # pages are separate arrays; merge first
 
 # Totals by severity
-jq -r 'group_by(.security_advisory.severity) | .[] | [.[0].security_advisory.severity, length] | @tsv' /tmp/dep_open.json
+jq -r 'sort_by(.security_advisory.severity) | group_by(.security_advisory.severity) | .[] | [.[0].security_advisory.severity, length] | @tsv' /tmp/dep_open.json
 
 # Per-repo: total / critical / high, sorted worst-first
-jq -r 'group_by(.repository.full_name) | sort_by(-length) | .[] |
+jq -r 'sort_by(.repository.full_name) | group_by(.repository.full_name) | sort_by(-length) | .[] |
   [.[0].repository.full_name, length,
    ([.[] | select(.security_advisory.severity=="critical")] | length),
    ([.[] | select(.security_advisory.severity=="high")] | length)] | @tsv' /tmp/dep_open.json
@@ -54,11 +59,12 @@ gh api "/orgs/<ORG>/secret-scanning/alerts?state=open" --paginate \
 
 gh api "/orgs/<ORG>/code-scanning/alerts?state=open&severity=critical" --paginate \
   --jq '.[] | [.repository.full_name, .rule.id, .html_url] | @tsv'
-gh api "/orgs/<ORG>/code-scanning/alerts?state=open" --paginate \
-  --jq 'group_by(.repository.full_name) | .[] | [.[0].repository.full_name, length] | @tsv'
+gh api "/orgs/<ORG>/code-scanning/alerts?state=open&per_page=100" --paginate > /tmp/code_alerts_pages.json
+jq -s 'add' /tmp/code_alerts_pages.json > /tmp/code_open.json
+jq -r 'sort_by(.repository.full_name) | group_by(.repository.full_name) | .[] | [.[0].repository.full_name, length] | @tsv' /tmp/code_open.json
 ```
 
-Any secret-scanning alert older than 14 days is **stale** — secrets cannot be auto-fixed; each one needs rotation + revocation by a human. Always surface these at the top of the digest with owner (see repo ownership in the workspace `CLAUDE.md` team table).
+Any secret-scanning alert older than 14 days is **stale** — secrets cannot be auto-fixed; each one needs rotation + revocation by a human. Always surface these at the top of the digest with owner; use known repo ownership metadata when available, otherwise mark the owner as `unknown` and call out the follow-up needed.
 
 ## Step 3 — Dependabot fix-PR health
 
@@ -66,7 +72,7 @@ Security-update PRs are enabled org-wide (since 2026-08-18) and the noisiest rep
 
 ```bash
 gh search prs --owner <ORG> --author "app/dependabot" --state open \
-  --json repository,title,url,createdAt,isDraft --limit 100 \
+  --json repository,title,url,createdAt,isDraft --limit 500 \
   --jq '.[] | [.repository.nameWithOwner, .createdAt[0:10], .title, .url] | @tsv'
 ```
 
