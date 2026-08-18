@@ -11,6 +11,17 @@ User says `/security-triage`, or asks for a security-alert sweep, security diges
 1. **Org** — GitHub organisation slug. Default: `warrisk-no`.
 2. **Mode** — `digest` (report only, default) or `act` (also file issues for criticals and comment on stale items).
 
+## Environment note — no `gh` CLI
+
+Cloud/sandboxed sessions may not have `gh` installed. If `command -v gh` fails, replace every `gh api <path>` below with:
+
+```bash
+curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+  "https://api.github.com<path>?per_page=100&page=N"
+```
+
+paginating manually (loop `page=N` until an empty array comes back), and use a GitHub MCP server (if available) or the REST API for issue creation/search instead of `gh issue` / `gh search` / `gh pr`. The endpoints and jq filters are identical.
+
 ## Step 1 — Dependabot alerts, org-wide
 
 ```bash
