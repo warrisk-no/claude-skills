@@ -22,6 +22,7 @@ Shared [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for 
 | `/warrisk:cto-summary` | Daily executive summary for the org: team standup, strategic project status, blockers |
 | `/warrisk:db-pr-review` | Review a `warrisk-no/database` PR against repo conventions: war-schema SECURITY DEFINER pattern, split check, SQL test format, disabled CI tests |
 | `/warrisk:db-review-app-e2e` | Point a portal review app at a database review app for end-to-end testing, verify routing, report the URL to the issue |
+| `/warrisk:security-triage` | Sweep org Dependabot/secret-scanning/code-scanning alerts, check fix-PR health, file issues for criticals, produce a prioritized digest |
 
 ## Update
 
