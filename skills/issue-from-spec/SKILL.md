@@ -48,7 +48,7 @@ Every issue body opens with a `## TL;DR` — one paragraph a developer can read 
 - **No fix.** Implementation steps belong in the body below; the TL;DR explains the problem, not the solution.
 - **One paragraph, plain developer language.** Technical terms are fine; density for its own sake is not.
 
-When asked to add a TL;DR (or "human summary") to an **existing** issue, prepend the paragraph above the current body followed by a `---` divider, and preserve the original body verbatim.
+When asked to add a TL;DR (or "human summary") to an **existing** issue, prepend the full section — the `## TL;DR` heading plus the paragraph — above the current body, followed by a `---` divider, and preserve the original body verbatim.
 
 ## Guidelines for decomposing a spec into issues
 
