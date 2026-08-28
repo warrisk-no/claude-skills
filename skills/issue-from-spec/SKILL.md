@@ -27,6 +27,9 @@ For each issue, produce:
 **Labels:** <label1>, <label2>
 **Milestone:** <milestone name>
 
+## TL;DR
+<one paragraph: what the problem or work is and why it matters, written plainly for a developer>
+
 ## Context
 <1–3 sentences: why this work exists, what it replaces or enables, who benefits>
 
@@ -35,6 +38,17 @@ For each issue, produce:
 - <specific, testable, unambiguous criterion>
 - ...
 ```
+
+## TL;DR rules
+
+Every issue body opens with a `## TL;DR` — one paragraph a developer can read cold and understand the issue:
+
+- **Keep the why.** State what is broken or needed and the mechanism behind it.
+- **No timeline.** Dates and incident chronology belong in Context, not the TL;DR.
+- **No fix.** Implementation steps belong in the body below; the TL;DR explains the problem, not the solution.
+- **One paragraph, plain developer language.** Technical terms are fine; density for its own sake is not.
+
+When asked to add a TL;DR (or "human summary") to an **existing** issue, prepend the paragraph above the current body followed by a `---` divider, and preserve the original body verbatim.
 
 ## Guidelines for decomposing a spec into issues
 
@@ -63,6 +77,9 @@ Output:
 
 **Labels:** devops, pipeline, ci
 **Milestone:** v1 — CI/CD parity
+
+## TL;DR
+Heroku CI is being retired, so the AIS pipeline needs an equivalent GitHub Actions setup: test every PR, block merges on failures, and publish the Docker image to GHCR on merge — otherwise merges to `main` ship unverified.
 
 ## Context
 Replace Heroku CI with GitHub Actions. Runs on every PR and push to main, with image publishing on merge.
