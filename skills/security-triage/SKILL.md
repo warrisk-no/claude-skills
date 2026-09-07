@@ -21,12 +21,12 @@ User says `/security-triage`, or asks for a security-alert sweep, security diges
 **Token for the alert endpoints (Steps 1–2):** cloud sessions proxy GitHub API traffic, and the proxied session token (`GH_TOKEN`/`GITHUB_TOKEN`) is blocked for the `dependabot/alerts`, `secret-scanning/alerts`, and `code-scanning/alerts` paths. A dedicated read-only PAT is provided as `SECURITY_TRIAGE_GH_PAT` in the scheduled routine's environment. Prefer it whenever it is set, and call the alert endpoints with direct `curl` (not `gh api`, which routes through the blocking proxy):
 
 ```bash
-TOKEN="${SECURITY_TRIAGE_GH_PAT:-$GITHUB_TOKEN}"
+TOKEN="${SECURITY_TRIAGE_GH_PAT:-${GITHUB_TOKEN:-$GH_TOKEN}}"
 curl -sf -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
   "https://api.github.com<path>?per_page=100&page=N"
 ```
 
-paginating manually (loop `page=N` until an empty array comes back). If the alert calls still return 403 with the PAT set, say so explicitly in the digest (that means the sandbox proxy intercepts direct calls to api.github.com too).
+paginating manually (loop `page=N` until an empty array comes back). The `gh api` commands in Steps 1–2 below are the canonical endpoint reference — in cloud sessions translate them to this curl form even when `gh` is installed. If the alert calls still return 403 with the PAT set, say so explicitly in the digest (that means the sandbox proxy intercepts direct calls to api.github.com too).
 
 Cloud/sandboxed sessions may also lack `gh` entirely. If `command -v gh` fails, replace every remaining `gh api <path>` below with the same curl form, and use a GitHub MCP server (if available) or the REST API for issue creation/search instead of `gh issue` / `gh search` / `gh pr`. The endpoints and jq filters are identical. Non-alert calls (issues, PRs, search) work fine with the session token — the PAT is only needed for the alert endpoints.
 
