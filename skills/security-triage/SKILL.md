@@ -23,7 +23,8 @@ User says `/security-triage`, or asks for a security-alert sweep, security diges
 The `gh api` commands in Steps 1–2 below are the canonical endpoint reference and work as written in local sessions, where `gh` is authenticated with a token carrying the `security_events` scope. In a non-Claude sandbox without `gh`, the curl equivalent is:
 
 ```bash
-curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
+curl -sf -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
   "https://api.github.com<path>?per_page=100&page=N"
 ```
 
