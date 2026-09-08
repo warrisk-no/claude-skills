@@ -16,19 +16,21 @@ User says `/security-triage`, or asks for a security-alert sweep, security diges
 1. **Org** — GitHub organisation slug. Default: `warrisk-no`.
 2. **Mode** — `digest` (report only, default) or `act` (also file issues for criticals and comment on stale items).
 
-## Environment note — tokens and no `gh` CLI
+## Environment note — cloud sessions, tokens, and `gh`
 
-**Token for the alert endpoints (Steps 1–2):** cloud sessions proxy GitHub API traffic, and the proxied session token (`GH_TOKEN`/`GITHUB_TOKEN`) is blocked for the `dependabot/alerts`, `secret-scanning/alerts`, and `code-scanning/alerts` paths. A dedicated read-only PAT is provided as `SECURITY_TRIAGE_GH_PAT` in the scheduled routine's environment. Prefer it whenever it is set, and call the alert endpoints with direct `curl` (not `gh api`, which routes through the blocking proxy):
+**Alert endpoints (Steps 1–2) in cloud sessions:** the Claude cloud sandbox proxies ALL api.github.com traffic and rewrites the Authorization header, so the REST alert endpoints (`dependabot/alerts`, `secret-scanning/alerts`, `code-scanning/alerts`) return 403 no matter which token is used — a dedicated PAT in an env var does not help (verified 2026-09-07 against both org- and repo-level paths). In cloud sessions, pull alert data through the attached read-only GitHub MCP connectors instead. GitHub's hosted MCP server excludes the security toolsets by default and only exposes them on per-toolset endpoints, so there is one connector per alert type (`github-dependabot`, `github-secrets`, `github-codescan` → `https://api.githubcopilot.com/mcp/x/{dependabot,secret_protection,code_security}/readonly`), each providing `list_*`/`get_*` alert tools. The list tools are repo-scoped (`owner` + `repo` required, no org-level listing): enumerate the org's non-archived repos first, iterate, then aggregate to the org-wide views below. If a connector is missing or its tools all error, skip that alert type in Steps 1–2, say exactly why in the digest, and continue.
+
+The `gh api` commands in Steps 1–2 below are the canonical endpoint reference and work as written in local sessions, where `gh` is authenticated with a token carrying the `security_events` scope. In a non-Claude sandbox without `gh`, the curl equivalent is:
 
 ```bash
-TOKEN="${SECURITY_TRIAGE_GH_PAT:-${GITHUB_TOKEN:-$GH_TOKEN}}"
+TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
 curl -sf -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
   "https://api.github.com<path>?per_page=100&page=N"
 ```
 
-paginating manually (loop `page=N` until an empty array comes back). The `gh api` commands in Steps 1–2 below are the canonical endpoint reference — in cloud sessions translate them to this curl form even when `gh` is installed. If the alert calls still return 403 with the PAT set, say so explicitly in the digest (that means the sandbox proxy intercepts direct calls to api.github.com too).
+paginating manually (loop `page=N` until an empty array comes back). Use a GitHub MCP server (if available) or the REST API for issue creation/search when `gh issue` / `gh search` / `gh pr` are unavailable — non-alert calls (issues, PRs, search) work fine with the session token even in cloud sessions.
 
-Cloud/sandboxed sessions may also lack `gh` entirely. If `command -v gh` fails, replace every remaining `gh api <path>` below with the same curl form, and use a GitHub MCP server (if available) or the REST API for issue creation/search instead of `gh issue` / `gh search` / `gh pr`. The endpoints and jq filters are identical. Non-alert calls (issues, PRs, search) work fine with the session token — the PAT is only needed for the alert endpoints.
+Never print token values: no `set -x` (or `echo`) around commands that contain credentials — cloud session transcripts are persisted.
 
 ## Step 1 — Dependabot alerts, org-wide
 
