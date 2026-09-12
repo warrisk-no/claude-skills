@@ -28,9 +28,11 @@ This is Kafka-specific. A vendor feed can have the opposite property — PNTGuar
 
 ```python
 import sys
-sys.path.insert(0, "/Users/kiowa/warrisk/ais")
+from pathlib import Path
+repo = Path.cwd()  # run this from the selected repo's root
+sys.path.insert(0, str(repo))
 from dotenv import load_dotenv
-load_dotenv("/Users/kiowa/warrisk/ais/.env")   # explicit path: see trap below
+load_dotenv(repo / ".env")   # explicit path: see trap below
 from kafka import KafkaConsumer, TopicPartition
 from warrisk import kafka_helper
 
