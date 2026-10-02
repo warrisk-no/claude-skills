@@ -25,17 +25,21 @@ Verify every claim first: grep the code, including other repos it touches (for e
 
 1. **Find the target.**
    ```bash
-   gh pr view <n> --comments                                   # top-level comments
-   gh api repos/<owner>/<repo>/pulls/<n>/comments \
-     --jq '.[] | "\(.id) \(.user.login) \(.path):\(.line) \(.body[0:80])"'   # inline comments
+   # top-level comments
+   gh api --paginate repos/<owner>/<repo>/issues/<n>/comments \
+     --jq '.[] | "\(.id) \(.user.login) \(.body[0:80])"'
+   # inline comments; the first column is the thread's root id, the one to reply to
+   gh api --paginate repos/<owner>/<repo>/pulls/<n>/comments \
+     --jq '.[] | "\(.in_reply_to_id // .id) \(.id) \(.user.login) \(.path):\(.line) \(.body[0:80])"'
    ```
+   Replies go to the thread's root comment. GitHub doesn't accept a reply to a reply.
 2. **Draft** the comment and show it to the user. Revise until they approve. Don't post without approval.
 3. **Post** from a file in the scratchpad, so quoting can't break the body:
    ```bash
    # reply in an inline review thread
    gh api -X POST repos/<owner>/<repo>/pulls/<n>/comments/<comment_id>/replies -F body=@reply.md --jq .html_url
    # top-level PR comment
-   gh pr comment <n> --body-file reply.md
+   gh pr comment <n> -R <owner>/<repo> --body-file reply.md
    ```
 4. **Edit** a posted comment instead of posting a correction:
    ```bash
