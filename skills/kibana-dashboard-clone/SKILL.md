@@ -62,31 +62,61 @@ The last line is a summary (`exportedCount`, `missingRefCount`), not an object. 
 in the job's scratch directory. Note every `index-pattern` object: its `id` and `attributes.title` (the pattern)
 and `timeFieldName`.
 
-Then list what the panels read:
-- **Lens:** `panelsJSON[].embeddableConfig.attributes.state.datasourceStates.formBased.layers.*.columns.*.sourceField`
-- **Saved searches:** `attributes.columns`
-- **Dashboard filters:** `kibanaSavedObjectMeta.searchSourceJSON.filter[].meta.key`
-- **Maps:** `layerListJSON[].sourceDescriptor.geoField`, plus any field in its tooltips
+Then inventory **every** field the copy will use. Field names do not only sit in `sourceField`; they also appear in:
+- Lens formulas (`sum(call.feeds.sat)`), Lens layer and column filters;
+- saved-search `columns`, `sort` and query;
+- the dashboard's KQL or Lucene query and its filters (`meta.key` and the query body), and its controls;
+- map layers: `geoField`, metrics, joins, tooltips and layer filters.
 
-## Step 3 — Check the fields exist in the target
+A list of paths always misses some. Take every field name of the **old** index instead, and find which of them
+occur anywhere in the export's strings:
 
 ```python
 from elasticsearch import Elasticsearch
 es = Elasticsearch(os.environ["ELASTIC_URL"], api_key=os.environ["ELASTIC_API_KEY"])
+caps_old = es.field_caps(index=OLD_PATTERN, fields="*").body["fields"]
+old_fields = {f for f, t in caps_old.items() if not f.startswith("_") and not set(t) <= {"object", "nested"}}  # leaf fields only
+
+def strings(node):
+    if isinstance(node, str):
+        yield node
+        if node[:1] in "[{":                       # Kibana stores much of its state as JSON inside strings
+            try: yield from strings(json.loads(node))
+            except ValueError: pass
+    elif isinstance(node, dict):
+        for k, v in node.items(): yield k; yield from strings(v)
+    elif isinstance(node, list):
+        for v in node: yield from strings(v)
+
+text = "\n".join(strings([o for o in objs if "type" in o]))
+FIELDS = sorted(f for f in old_fields if re.search(rf"(?<![\w.]){re.escape(f)}(?![\w])", text))
+```
+
+Read through `FIELDS` once. A common word that happens to be a field name (e.g. `name`) can show up as a false
+match, which is harmless: it only adds a field to check. Note any other data views the export references (a
+second one, or a control's). Those are not swapped, but in a copy to another space they must exist there (Step 6).
+
+## Step 3 — Check the fields exist in the target
+
+```python
 for idx in (OLD_PATTERN, NEW_PATTERN):
     caps = es.field_caps(index=idx, fields=FIELDS).body["fields"]   # pass a list, not a joined string
+    # missing: f not in caps; retyped: set(caps[f]) differs between the two indices
 ```
 
 Every field must exist in the target **with the same type**. A missing or retyped field means that panel needs
 rebuilding, not a reference swap: stop and tell the user which panels are affected. Also compare the values a
 filter depends on (e.g. `fleet: nr` must exist in the new index).
 
-## Step 4 — Create or reuse the target data view
+## Step 4 — Create or reuse the target data view, in the target space
+
+Data views belong to a space. Create the new one in the space the copy will be imported into, which is not
+necessarily the source's:
 
 ```python
-dvs = requests.get(f"{base(space)}/api/data_views", headers=H).json()["data_view"]
+dvs = requests.get(f"{base(target_space)}/api/data_views", headers=H).json()["data_view"]
 dv = next((d for d in dvs if d["title"] == NEW_PATTERN), None) or requests.post(
-    f"{base(space)}/api/data_views/data_view", headers=H,
+    f"{base(target_space)}/api/data_views/data_view", headers=H,
     json={"data_view": {"title": NEW_PATTERN, "name": NEW_PATTERN, "timeFieldName": TIME_FIELD}}).json()["data_view"]
 NEW_ID = dv["id"]
 ```
@@ -99,12 +129,13 @@ filter, map layers through `indexPatternRefName`), each Lens panel's own `refere
 catches them all; nothing else carries a UUID that could collide.
 
 ```python
-keep = [o for o in objs if o.get("type") in ("dashboard", "search", "lens", "visualization", "map")]
+keep = [o for o in objs if "type" in o and not (o["type"] == "index-pattern" and o["id"] == OLD_ID)]
 keep = [json.loads(json.dumps(o).replace(OLD_ID, NEW_ID)) for o in keep]
 assert OLD_ID not in json.dumps(keep)
 ```
 
-Leave out the old `index-pattern` object, which would otherwise be imported again. Retitle the dashboard and
+Only the swapped data view is left out (it would otherwise be imported again). Everything else stays: a
+second data view, tags, a control's data view. Retitle the dashboard and
 every saved search (e.g. "… v4", "port calls v2"), and set a description that says what the copy reads.
 
 **Adding a panel:** copy an existing Lens panel of the same kind as a template; it is the most reliable shape.
@@ -114,6 +145,17 @@ in its attributes, and add the same reference to the dashboard with the name pre
 `bar_percentage_stacked` with one `sum` column per field shows shares over time.
 
 ## Step 6 — Import as new copies
+
+**Copying into another space:** check first that every object the copy references is either in `keep` or
+already exists in the target space. A reference to an object that is in neither shows up as a
+`missing_references` error, and the panel would be broken:
+
+```python
+ids_in_copy = {(o["type"], o["id"]) for o in keep}
+refs = {(r["type"], r["id"]) for o in keep for r in o.get("references", [])} - ids_in_copy
+missing = [t for t in refs if requests.get(f"{base(target_space)}/api/saved_objects/{t[0]}/{t[1]}", headers=H).status_code == 404]
+assert not missing, missing     # add those objects to the export (or create them in the target space) first
+```
 
 ```python
 nd = "\n".join(json.dumps(o) for o in keep) + "\n"
