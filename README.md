@@ -24,6 +24,8 @@ Shared [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for 
 | `/warrisk:security-triage` | Sweep org Dependabot/secret-scanning/code-scanning alerts, check fix-PR health, file issues for criticals, produce a prioritized digest |
 | `/warrisk:deploy-heroku-app` | Deploy a branch to a Heroku app over git: record the rollback target, detect a deploy that would roll back another branch, verify on the running slug, monitor the logs |
 | `/warrisk:survey-kafka-topic` | Inventory what is really on a Kafka topic without joining a consumer group, then cross-check against Elasticsearch to find silently dropped messages |
+| `/warrisk:pr-comment` | Write and post GitHub PR comments in house style: summary first, few words, concrete references, facts only; draft → approval → post/edit via `gh api` |
+| `/warrisk:kibana-dashboard-clone` | Copy a Kibana dashboard onto another index or data view: check the fields, swap every reference (Lens, maps, filters, saved searches), import as new objects into a space, verify, keep the export in the repo |
 
 ### Repo-local skills
 
